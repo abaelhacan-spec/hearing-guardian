@@ -1,0 +1,1 @@
+- [Hearing Guardian build rules](hearing-guardian-rules.md) — mandatory compatibility and build-stability rules the user set; must be followed every session.
