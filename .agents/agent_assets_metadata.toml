@@ -1,0 +1,8 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "eW0CgiRjboeYClZO6LCI-"
+uri = "file://artifacts/hearing-guardian/assets/images/icon.png"
+type = "image"
+title = "hearing guardian app icon"
