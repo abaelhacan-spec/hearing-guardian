@@ -17,7 +17,8 @@
       "supportsTablet": false
     },
     "android": {
-      "package": "com.hearingguardian.app"
+      "package": "com.hearingguardian.app",
+      "permissions": ["android.permission.BLUETOOTH_CONNECT"]
     },
     "web": {
       "favicon": "./assets/images/icon.png"
