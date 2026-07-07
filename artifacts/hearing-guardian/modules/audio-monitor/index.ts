@@ -3,10 +3,11 @@
  *
  * This file defines the contract between React Native and the Kotlin Event Engine.
  * In Expo Go / development: events are simulated via the UI controls.
- * In EAS Build (native): the Kotlin module sends real system events.
+ * In EAS Build (native): the Kotlin module (android/.../AudioMonitorModule.kt)
+ * sends real system events.
  *
  * Kotlin responsibilities (pure event bridge only):
- *   - Listen to Android system events
+ *   - Listen to Android system events (headset plug, Bluetooth SCO, audio device changes)
  *   - Forward them as EventEmitter events to React Native
  *   - Zero app logic in Kotlin
  *
@@ -15,43 +16,61 @@
  *   - onHeadsetDisconnected { source: 'bluetooth' | 'wired' }
  *   - onAudioPlaybackStarted  {}
  *   - onAudioPlaybackStopped  {}
+ *
+ * Only available on Android. iOS and web always run in simulation mode
+ * (see isNativeMode below), since the app's supported platform is Android
+ * (see app.json → expo.android.package).
  */
 
-import { NativeEventEmitter, NativeModules, Platform } from 'react-native';
+import { requireOptionalNativeModule, EventEmitter } from 'expo-modules-core';
+import { Platform } from 'react-native';
 import { AudioEvent } from '@/types';
 
-const { AudioMonitorModule } = NativeModules;
+type HeadsetSource = 'bluetooth' | 'wired';
 
-const isNativeAvailable =
-  Platform.OS === 'android' && AudioMonitorModule != null;
+interface AudioMonitorNativeModule {
+  startMonitoring(): Promise<void>;
+  stopMonitoring(): Promise<void>;
+  getHeadsetState(): Promise<{ connected: boolean; source?: HeadsetSource }>;
+}
+
+// requireOptionalNativeModule returns null instead of throwing when the
+// native module isn't present (e.g. Expo Go, iOS, web) — this keeps the
+// simulation fallback working exactly as before.
+const nativeModule =
+  Platform.OS === 'android'
+    ? requireOptionalNativeModule<AudioMonitorNativeModule>('AudioMonitorModule')
+    : null;
+
+const isNativeAvailable = nativeModule != null;
 
 class AudioMonitorModuleClass {
-  private emitter: NativeEventEmitter | null = null;
+  private emitter: EventEmitter<Record<string, any>> | null = null;
 
   constructor() {
-    if (isNativeAvailable) {
-      this.emitter = new NativeEventEmitter(AudioMonitorModule);
+    if (isNativeAvailable && nativeModule) {
+      this.emitter = new EventEmitter(nativeModule as any);
     }
   }
 
   async startMonitoring(): Promise<void> {
-    if (isNativeAvailable && AudioMonitorModule?.startMonitoring) {
-      await AudioMonitorModule.startMonitoring();
+    if (isNativeAvailable && nativeModule) {
+      await nativeModule.startMonitoring();
     }
   }
 
   async stopMonitoring(): Promise<void> {
-    if (isNativeAvailable && AudioMonitorModule?.stopMonitoring) {
-      await AudioMonitorModule.stopMonitoring();
+    if (isNativeAvailable && nativeModule) {
+      await nativeModule.stopMonitoring();
     }
   }
 
   async getHeadsetState(): Promise<{
     connected: boolean;
-    source?: 'bluetooth' | 'wired';
+    source?: HeadsetSource;
   }> {
-    if (isNativeAvailable && AudioMonitorModule?.getHeadsetState) {
-      return AudioMonitorModule.getHeadsetState();
+    if (isNativeAvailable && nativeModule) {
+      return nativeModule.getHeadsetState();
     }
     return { connected: false };
   }
@@ -62,10 +81,10 @@ class AudioMonitorModuleClass {
     }
 
     const subs = [
-      this.emitter.addListener('onHeadsetConnected', (data) =>
+      this.emitter.addListener('onHeadsetConnected', (data: { source?: HeadsetSource }) =>
         callback({ type: 'headset_connected', timestamp: Date.now(), source: data?.source })
       ),
-      this.emitter.addListener('onHeadsetDisconnected', (data) =>
+      this.emitter.addListener('onHeadsetDisconnected', (data: { source?: HeadsetSource }) =>
         callback({ type: 'headset_disconnected', timestamp: Date.now(), source: data?.source })
       ),
       this.emitter.addListener('onAudioPlaybackStarted', () =>
